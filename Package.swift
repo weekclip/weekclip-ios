@@ -14,8 +14,17 @@ let package = Package(
     .library(name: "WeekclipPresentation", targets: ["WeekclipPresentation"]),
   ],
   dependencies: [
+    // Auth & Backend
+    .package(url: "https://github.com/supabase/supabase-swift", .upToNextMajor(from: "1.0.0")),
+
     // Networking
     .package(url: "https://github.com/Alamofire/Alamofire.git", .upToNextMajor(from: "5.9.0")),
+
+    // Image loading
+    .package(url: "https://github.com/kean/Nuke.git", .upToNextMajor(from: "12.0.0")),
+
+    // Dependency Injection
+    .package(url: "https://github.com/Swinject/Swinject.git", .upToNextMajor(from: "2.8.0")),
 
     // Logging
     .package(url: "https://github.com/apple/swift-log.git", .upToNextMajor(from: "1.5.0")),
@@ -49,6 +58,8 @@ let package = Package(
         "WeekclipShared",
         "WeekclipDomain",
         .product(name: "Alamofire", package: "Alamofire"),
+        .product(name: "Supabase", package: "supabase-swift"),
+        .product(name: "Nuke", package: "Nuke"),
       ],
       path: "Sources/Data"
     ),
@@ -60,6 +71,7 @@ let package = Package(
         "WeekclipShared",
         "WeekclipDomain",
         "WeekclipData",
+        .product(name: "Swinject", package: "Swinject"),
       ],
       path: "Sources/Presentation"
     ),

@@ -1,20 +1,11 @@
 import SwiftUI
 
+/// Legacy content view - replaced by AppNavigation
 public struct ContentView: View {
-  @State private var title = "WeekClip iOS"
-
   public init() {}
 
   public var body: some View {
-    VStack {
-      Image(systemName: "globe")
-        .imageScale(.large)
-        .foregroundStyle(.tint)
-      Text(title)
-        .font(.largeTitle)
-        .fontWeight(.bold)
-    }
-    .padding()
+    AppNavigation(authViewModel: AuthViewModel())
   }
 }
 

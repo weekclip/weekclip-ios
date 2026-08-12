@@ -1,28 +1,26 @@
 import Foundation
 
-/// Use case for fetching media
+/// Use case for fetching media from a studio
 public protocol GetMediaUseCaseProtocol {
-  func callAsFunction() async throws -> [Media]
+  func callAsFunction(studioId: String, limit: Int, lastId: String?) async throws -> [StudioMedia]
 }
 
 public struct GetMediaUseCase: GetMediaUseCaseProtocol {
-  public init() {}
+  private let repository: StudioRepository
 
-  public func callAsFunction() async throws -> [Media] {
-    // Placeholder
-    return []
+  public init(repository: StudioRepository) {
+    self.repository = repository
   }
-}
 
-/// Media model
-public struct Media: Identifiable, Codable {
-  public let id: String
-  public let title: String
-  public let url: String
-
-  public init(id: String, title: String, url: String) {
-    self.id = id
-    self.title = title
-    self.url = url
+  public func callAsFunction(
+    studioId: String,
+    limit: Int = 20,
+    lastId: String? = nil
+  ) async throws -> [StudioMedia] {
+    return try await repository.fetchMedia(
+      studioId: studioId,
+      limit: limit,
+      lastId: lastId
+    )
   }
 }
