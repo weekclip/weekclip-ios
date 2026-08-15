@@ -65,11 +65,31 @@ set a team under *Signing & Capabilities*, and Run. On first launch the device
 will refuse the app until you trust the developer profile under
 *Settings > General > VPN & Device Management*.
 
-Command-line equivalent:
+Command-line equivalent — build, install, launch:
 ```bash
+DEVICE=$(xcrun devicectl list devices | awk '/connected/ {print $3; exit}')
+
 xcodebuild -project Weekclip.xcodeproj -scheme Weekclip \
-  -destination 'platform=iOS,name=<YOUR IPHONE>' build
+  -destination "platform=iOS,id=$DEVICE" -derivedDataPath build \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
+
+xcrun devicectl device install app --device "$DEVICE" \
+  build/Build/Products/Debug-iphoneos/WeekClip.app
+xcrun devicectl device process launch --device "$DEVICE" \
+  --terminate-existing com.weekclip.ios
 ```
+
+`-allowProvisioningDeviceRegistration` is required in addition to
+`-allowProvisioningUpdates` the first time a given device is used; without it
+the build fails with "Device isn't registered in your developer account".
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Everything Xcode-related aborts with `Symbol not found: _XPCTypeBool` | A stale `/Library/Developer/PrivateFrameworks/CoreDevice.framework` left by an older Xcode. Fix: `sudo xcodebuild -runFirstLaunch` |
+| `Developer Mode disabled` | On the phone: Settings > Privacy & Security > Developer Mode > on, then reboot |
+| `CodeSign ... errSecInternalComponent` | codesign cannot reach the private key. Build once from the Xcode GUI and choose *Always Allow*, or run `security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db` |
 
 ## Development
 
