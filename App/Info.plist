@@ -22,6 +22,20 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Build-time values that must not be committed. Each expands from a build
+	     setting declared in project.yml, which defaults to empty so a clean
+	     checkout and CI both build; real values are passed on the xcodebuild
+	     command line from the superrepo's encrypted ledger. See README
+	     "Running against dev". The Supabase anon key is public by construction
+	     (weekclip.com serves it to every browser) but the ledger is where it
+	     lives, and the debug credentials are neither public nor read by a
+	     release build — DebugAutoSignIn is inside #if DEBUG. -->
+	<key>WeekclipSupabaseAnonKey</key>
+	<string>$(WEEKCLIP_SUPABASE_ANON_KEY)</string>
+	<key>WeekclipDebugSignInEmail</key>
+	<string>$(WEEKCLIP_DEBUG_SIGN_IN_EMAIL)</string>
+	<key>WeekclipDebugSignInPassword</key>
+	<string>$(WEEKCLIP_DEBUG_SIGN_IN_PASSWORD)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

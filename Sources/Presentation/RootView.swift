@@ -39,6 +39,10 @@ public struct RootView: View {
       }
       path.append(route)
     }
+    // Process-start work. Empty in a release build; on debug it restores or
+    // mints the session (148.5). `.task` rather than `.onAppear` so it is async
+    // and cancelled with the view.
+    .task { await container.start() }
   }
 }
 

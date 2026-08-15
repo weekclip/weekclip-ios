@@ -21,4 +21,9 @@ public enum AppLog {
 
   /// View models and state transitions.
   public static let ui = Logger(subsystem: subsystem, category: "ui")
+
+  /// Session lifecycle: restore, refresh, sign-out. Never the token itself —
+  /// `os.Logger` redacts interpolated values by default, and the two places
+  /// that log a session deliberately interpolate only a user id.
+  public static let session = Logger(subsystem: subsystem, category: "session")
 }
