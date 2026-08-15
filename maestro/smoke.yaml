@@ -21,9 +21,13 @@ tags:
 # does not matter here — both clear `isLoading`, and which one you get depends on
 # whether this machine can reach the WAF-gated dev API. This flow asserts the
 # spine, not the network.
+# 45s, not 15s. The wait has to outlast the HTTP client, or a slow network
+# fails this flow before the request itself gives up — and the report would
+# blame the app. APIClient.defaultSession() budgets 15s per request / 30s per
+# resource, so 45s is that ceiling plus room to draw.
 - extendedWaitUntil:
     notVisible:
       id: "dashboard-loading"
-    timeout: 15000
+    timeout: 45000
 
 - takeScreenshot: dashboard

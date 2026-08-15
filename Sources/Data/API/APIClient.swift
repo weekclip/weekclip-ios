@@ -20,13 +20,31 @@ public final class APIClient: Sendable {
 
   public init(
     baseURL: URL,
-    session: URLSession = .shared,
+    session: URLSession = APIClient.defaultSession(),
     tokenProvider: any SessionTokenProvider = NoSessionTokenProvider()
   ) {
     self.baseURL = baseURL
     self.session = session
     self.tokenProvider = tokenProvider
     self.decoder = JSONDecoder()
+  }
+
+  /// The session ordinary API calls use.
+  ///
+  /// Not `URLSession.shared`, whose `timeoutIntervalForRequest` is **60
+  /// seconds**. A minute of spinner on a phone that has drifted off Wi-Fi is
+  /// not a loading state, it is a hang — and it is long enough that a UI test
+  /// waiting on the spinner to clear times out before the request does, which
+  /// reads as an app failure rather than a slow network.
+  ///
+  /// 15/30 matches the OkHttp client in weekclip-android. Uploads do not use
+  /// this session: PRD-0008 D8 needs a background configuration with its own
+  /// (much longer) budget.
+  public static func defaultSession() -> URLSession {
+    let configuration = URLSessionConfiguration.default
+    configuration.timeoutIntervalForRequest = 15
+    configuration.timeoutIntervalForResource = 30
+    return URLSession(configuration: configuration)
   }
 
   /// GETs `path`, unwraps the envelope, and folds everything that can go wrong
