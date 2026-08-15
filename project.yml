@@ -45,6 +45,14 @@ targets:
         CODE_SIGN_STYLE: Automatic
         # Team ID (the OU of the Apple Development certificate), not secret.
         DEVELOPMENT_TEAM: Q8J5K74H37
+        # Declared empty so the project builds with no configuration at all;
+        # Info.plist expands them, and `xcodebuild WEEKCLIP_… = …` supplies real
+        # values from the superrepo's encrypted ledger (README "Running against
+        # dev"). An empty anon key means AuthConfig.isConfigured is false, which
+        # every caller already handles as "cannot renew, report signed out".
+        WEEKCLIP_SUPABASE_ANON_KEY: ""
+        WEEKCLIP_DEBUG_SIGN_IN_EMAIL: ""
+        WEEKCLIP_DEBUG_SIGN_IN_PASSWORD: ""
 
   WeekclipTests:
     type: bundle.unit-test

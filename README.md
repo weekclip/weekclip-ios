@@ -100,6 +100,47 @@ the build fails with "Device isn't registered in your developer account".
 | `Developer Mode disabled` | On the phone: Settings > Privacy & Security > Developer Mode > on, then reboot |
 | `CodeSign ... errSecInternalComponent` | codesign cannot reach the private key. Build once from the Xcode GUI and choose *Always Allow*, or `security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db` |
 
+## Running against dev
+
+Everything above builds with no configuration. Reaching the dev tier with a real
+session needs three build settings, all empty by default so CI and a clean
+checkout are unaffected. Values come from the superrepo's encrypted ledger —
+they are not committed here:
+
+```bash
+V=../scripts/secrets/vault.sh
+xcodebuild build -project Weekclip.xcodeproj -scheme Weekclip \
+  -destination "platform=iOS Simulator,id=$(./scripts/pick-simulator.sh)" \
+  -derivedDataPath build \
+  WEEKCLIP_SUPABASE_ANON_KEY="$($V get dev SUPABASE_ANON_KEY)" \
+  WEEKCLIP_DEBUG_SIGN_IN_EMAIL="adam@weekclip.com" \
+  WEEKCLIP_DEBUG_SIGN_IN_PASSWORD="$($V get dev CAPTURE_BOT_PASSWORD)"
+```
+
+`Info.plist` expands them; `AuthConfig` and `DebugAutoSignIn` read them from
+there. With them set, a debug build signs in **once** on first launch and
+restores the stored session on every launch after:
+
+```bash
+xcrun simctl spawn <udid> log show --info --style compact --start "<time>" \
+  --predicate 'subsystem == "cc.sunglint.weekclip" AND category == "session"'
+```
+
+tells you which happened — `signed in` vs `restored a stored session … no
+network needed` — and that difference is the point of the feature. Without them
+the app behaves like a release build: no session, `AppError.unauthorized`, error
+screen.
+
+> ⚠️ **The dev API is behind a WAF that allows exactly one address** — the
+> WireGuard egress `158.247.237.200` (superrepo
+> `docs/ops/security-topology-161.md` §3). Off the VPN, `*.weekclip.dev` answers
+> **403 with a Cloudflare HTML page**, which the app maps to
+> `AppError.unauthorized` and renders as "Your session has ended" — a session
+> error for a network problem. If sign-in succeeds but every API call fails,
+> check the VPN before you debug the session code. Supabase itself is *not*
+> behind that WAF, which is why sign-in can succeed while everything after it
+> fails.
+
 ## UI verification (Maestro)
 
 Unit tests never construct the app, so nothing else here can tell you it
@@ -145,7 +186,9 @@ Sources/
 ├── Domain/                   # models, repository protocols, use cases
 ├── Data/
 │   ├── API/                  # APIClient (URLSession), endpoints, envelope,
-│   │                         # session-token seam
+│   │                         # session axis + credential provider
+│   ├── Session/              # the session itself: Keychain store, refresh
+│   │                         # with single-flight, SessionManager
 │   ├── DTO/                  # wire shapes + mapping to domain
 │   └── Repository/           # implementations of the domain protocols
 └── Presentation/
@@ -202,6 +245,7 @@ Not built yet, on purpose:
 | Missing | Why it is not here |
 |---|---|
 | Local cache | PRD-0008 states no offline requirement. A schema with no read path is a migration liability from day one; `StudioRepository` is the seam that makes one addable |
-| Auth / Keychain session storage | Task 148.5. `SessionTokenProvider` is the seam — today it returns nil and requests come back 401, which the UI already renders |
+| Sign-in (Google OAuth) | Task 148.5c-b, and it is **blocked on console work** — an iOS OAuth client and a redirect URL registered with Supabase. Google is the product's only login (weekclip-web `LoginPage.tsx`). Until then a **debug-only** password sign-in stands in; see "Running against dev" |
+| Guest / share session storage | PRD-0008 D5 needs one, but nothing writes it yet: a share session is minted by entering a link's password on a screen that does not exist (task 148.7). The **axis** is real and tested — `SessionAxis` routes `/api/v1/share/*` away from the profile bearer, so the store plugs in behind `SessionCredentialProvider` without `APIClient` or a repository changing |
 | Universal Links entitlement | Task 148.5, and it needs `apple-app-site-association` served from `weekclip.com` first. `WeekclipRoute(url:)` is the half that lives here, and it is tested |
 | TestFlight upload | Task 148.4c. Needs signing secrets in the value ledger (`secrets/*.enc.yaml`), not in a console |
