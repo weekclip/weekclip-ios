@@ -12,6 +12,7 @@ import WeekclipShared
 /// Everything else is still a placeholder and lands in Phase 5 (PRD-0008).
 public struct RootView: View {
   @State private var path: [WeekclipRoute] = []
+  @State private var gate: AppGateState = .checking
 
   private let container: AppContainer
 
@@ -20,6 +21,41 @@ public struct RootView: View {
   }
 
   public var body: some View {
+    // The version gate wraps the whole app rather than sitting on one screen
+    // (PRD-0008 D6①). `checking` renders nothing: starting at `allowed` would
+    // flash the dashboard for a frame before a block landed, and starting at
+    // blocked would flash a force-update screen at everyone.
+    switch gate {
+    case .checking:
+      Color.clear.task { await runGate() }
+    case .updateRequired(let storeURL):
+      UpdateRequiredView(storeURL: storeURL)
+    case .allowed:
+      content
+    }
+  }
+
+  /// One check, once, at launch. Absent in the preview/test container, which
+  /// never talks to a server — there is nothing to gate against.
+  private func runGate() async {
+    guard let getAppUpdateRequirement = container.getAppUpdateRequirement else {
+      gate = .allowed
+      return
+    }
+    // `CFBundleVersion` rather than `CFBundleShortVersionString`: the server
+    // compares build numbers precisely because integer comparison cannot be got
+    // subtly wrong the way semver can.
+    let build =
+      Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0
+    switch await getAppUpdateRequirement(currentBuild: build) {
+    case .notRequired:
+      gate = .allowed
+    case .required(let storeURL):
+      gate = .updateRequired(storeURL: storeURL)
+    }
+  }
+
+  private var content: some View {
     NavigationStack(path: $path) {
       DashboardView(
         viewModel: container.makeDashboardViewModel(),
