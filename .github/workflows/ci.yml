@@ -1,42 +1,165 @@
 name: iOS CI
 
+# This workflow had never produced a green run before 2026-08-15 (#148), and
+# could not have produced a meaningful one. The previous version:
+#
+#   · ran `swift build` / `swift test`, which compile the library modules for
+#     the macOS HOST. That never touches the app bundle, so it could not tell
+#     you whether the app builds, launches, or passes a test on iOS. It also
+#     could not have worked at all: there was no .xcodeproj, because SwiftPM
+#     cannot produce an iOS app bundle (ADR-0002 D3).
+#   · pinned swift-actions/setup-swift to 5.9 while the app needs the Xcode
+#     toolchain, not a standalone one.
+#   · ended the lint job with `swiftlint lint ... || true` — a job that can only
+#     succeed. weekclip-android shipped exactly that pattern
+#     (`./gradlew ktlintCheck || true`) and it hid a broken build for weeks.
+#
+# Everything here runs against a simulator, and nothing is allowed to pass
+# vacuously.
+
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+
+# A newer push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: macos-latest
+  # Maestro flows cannot RUN here — that needs a booted simulator with the app
+  # installed, which is what `verify` does locally on a dev machine. What CI can
+  # do is catch a flow that would have died on a typo, which is the failure mode
+  # that wastes a human's device session. `check-syntax` exits 1 on an unknown
+  # command, so this is a real check.
+  flows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-    - name: Set up Swift
-      uses: swift-actions/setup-swift@v1
-      with:
-        swift-version: 5.9
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
 
-    - name: Build
-      run: swift build
+      - name: Install Maestro CLI
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-    - name: Run tests
-      run: swift test
+      - name: Check flow syntax
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: '1'
+        run: |
+          shopt -s nullglob
+          flows=(maestro/*.yaml)
+          if [ ${#flows[@]} -eq 0 ]; then
+            echo "no flows found under maestro/ — this job would pass vacuously" >&2
+            exit 1
+          fi
+          for f in "${flows[@]}"; do
+            echo "== $f"
+            maestro check-syntax "$f"
+          done
 
-  lint:
-    runs-on: macos-latest
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 45
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-    - name: Set up Swift
-      uses: swift-actions/setup-swift@v1
-      with:
-        swift-version: 5.9
+      # PRD-0008 D3 / N6. Runs FIRST and needs no toolchain: if the binary would
+      # carry payment copy, there is no point spending twenty minutes building
+      # it. This is the platform the rule actually exists for — Guideline 3.1.1.
+      - name: Payment-string gate (PRD-0008 D3)
+        run: ./scripts/check-no-payment-strings.sh
 
-    - name: Check formatting
-      run: swift format --lint Sources Tests
+      # Newest Xcode on the image, chosen by sort rather than pinned to a
+      # version string that goes stale every runner-image bump.
+      - name: Select the newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "using $newest"
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
 
-    - name: Lint
-      run: swiftlint lint Sources Tests || true
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # `.xcodeproj` is generated and gitignored (ADR-0002 D3). CI regenerating
+      # it from project.yml is the point: it proves the checked-in spec is
+      # sufficient, which a committed project file never can.
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      # swift-format ships inside the Xcode toolchain, so there is nothing to
+      # install and no reason to tolerate a `|| true`. --strict makes warnings
+      # failures.
+      - name: Lint (swift-format)
+        run: |
+          xcrun swift-format lint --strict --recursive \
+            --configuration .swift-format Sources Tests App
+
+      # Picked from what the image actually has rather than hardcoding a model
+      # name. A missing device is a failure, not a silent fallback to "build
+      # only" — that is how a suite stops running without anyone noticing.
+      - name: Choose a simulator
+        id: sim
+        run: |
+          udid=$(./scripts/pick-simulator.sh)
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep -m1 "$udid"
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project Weekclip.xcodeproj \
+            -scheme Weekclip \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build \
+            -resultBundlePath build/build.xcresult
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project Weekclip.xcodeproj \
+            -scheme Weekclip \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build \
+            -resultBundlePath build/test.xcresult
+
+      # An archive is what actually exercises the Release configuration and the
+      # signing settings. Skipped on PRs from forks would be pointless here
+      # (solo repo), but signing is left to Xcode's automatic mode, so this is
+      # a build-for-archive without an export.
+      - name: Archive (Release configuration)
+        run: |
+          xcodebuild archive \
+            -project Weekclip.xcodeproj \
+            -scheme Weekclip \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Weekclip.xcarchive \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload result bundles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: build/*.xcresult
+          if-no-files-found: ignore
+
+      - name: Upload the app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-simulator
+          path: build/Build/Products/Debug-iphonesimulator/WeekClip.app
+          if-no-files-found: error

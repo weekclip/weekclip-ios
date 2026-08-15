@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "maestro": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "MAESTRO_CLI_NO_ANALYTICS=1 exec \"$(command -v maestro || echo \"$HOME/.maestro/bin/maestro\")\" mcp"
+      ]
+    }
+  }
+}

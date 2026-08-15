@@ -1,0 +1,33 @@
+appId: cc.sunglint.weekclip
+name: skeleton-smoke
+tags:
+  - smoke
+---
+# The app launches, renders its start destination, and completes one full pass
+# through the spine. A composition-root or SwiftUI wiring mistake fails here and
+# nowhere in the unit tests, which never construct the app.
+- launchApp:
+    clearState: true
+
+# By id, not by copy. SwiftUI does not derive an accessibility identifier from a
+# label, so these are set explicitly in DashboardView — and this assertion is
+# what proves they are still there. Drop one and the selector silently matches
+# nothing.
+- assertVisible: "Studios"
+
+# The real claim. `dashboard-loading` is the initial state, so its *disappearance*
+# means AppContainer built the graph, GetStudios ran, the repository answered,
+# and the new state reached SwiftUI. Whether the answer was a list or an error
+# does not matter here — both clear `isLoading`, and which one you get depends on
+# whether this machine can reach the WAF-gated dev API. This flow asserts the
+# spine, not the network.
+# 45s, not 15s. The wait has to outlast the HTTP client, or a slow network
+# fails this flow before the request itself gives up — and the report would
+# blame the app. APIClient.defaultSession() budgets 15s per request / 30s per
+# resource, so 45s is that ceiling plus room to draw.
+- extendedWaitUntil:
+    notVisible:
+      id: "dashboard-loading"
+    timeout: 45000
+
+- takeScreenshot: dashboard
