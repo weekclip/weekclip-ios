@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Universal Links (PRD-0008 D4 / N2). iOS fetches
+	  https://weekclip.com/.well-known/apple-app-site-association and will only
+	  hand this app a link once it finds "Q8J5K74H37.cc.sunglint.weekclip" in
+	  there. The file is served by weekclip-web (PR #203); until that is
+	  deployed, this entitlement simply never verifies — links keep opening the
+	  browser, which is exactly today's behaviour.
+
+	  `?mode=developer` is deliberately ABSENT. It makes the device fetch the
+	  association file directly instead of through Apple's CDN, which is the only
+	  way to test a domain the CDN cannot reach — and the dev tier is exactly
+	  that (weekclip.dev sits behind a WAF that allows one IP). It is a
+	  development-only affordance, and adding it here would ship it. When the dev
+	  domain needs testing, add "applinks:dev-web.weekclip.dev?mode=developer" to
+	  a local checkout and do not commit it.
+	-->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:weekclip.com</string>
+	</array>
+</dict>
+</plist>

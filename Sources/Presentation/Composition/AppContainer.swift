@@ -16,6 +16,10 @@ import WeekclipDomain
 public final class AppContainer {
   public let getStudios: GetStudios
 
+  /// Nil in the test/preview container: it builds over a fake repository and
+  /// never makes a request, so there is nothing to version-gate.
+  public let getAppUpdateRequirement: GetAppUpdateRequirement?
+
   /// Nil in the test/preview container: those build over a fake repository and
   /// never make a request, so there is no session to manage.
   private let sessionManager: SessionManager?
@@ -36,6 +40,9 @@ public final class AppContainer {
     self.sessionManager = manager
     self.authConfig = authConfig
     self.getStudios = GetStudios(repository: studioRepository)
+    self.getAppUpdateRequirement = GetAppUpdateRequirement(
+      repository: RemoteAppReleaseRepository(client: client)
+    )
   }
 
   /// Test/preview seam: build a container over an arbitrary repository so a
@@ -44,6 +51,7 @@ public final class AppContainer {
     self.sessionManager = nil
     self.authConfig = AuthConfig(supabaseURL: nil, anonKey: "")
     self.getStudios = GetStudios(repository: studioRepository)
+    self.getAppUpdateRequirement = nil
   }
 
   public func makeDashboardViewModel() -> DashboardViewModel {
