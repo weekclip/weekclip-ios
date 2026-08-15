@@ -15,6 +15,11 @@ Modern iOS native app for WeekClip with SwiftUI and MVVM architecture.
 
 ### Project Structure
 ```
+App/                    # iOS app shell (@main, Info.plist, assets) — the only
+                        # part that ships as an app target
+project.yml             # XcodeGen spec -> generates Weekclip.xcodeproj
+Package.swift           # SwiftPM package supplying the 4 library modules
+
 Sources/
 ├── Shared/              # Common utilities, error types, logging
 ├── Domain/              # Use cases, business logic
@@ -26,27 +31,44 @@ Tests/
 └── Data/
 ```
 
+`Weekclip.xcodeproj` is **generated and gitignored**. Never edit it by hand —
+change `project.yml` and regenerate.
+
 ## Setup
 
 ### Prerequisites
-- Xcode 15.0+
-- iOS 16.0+ deployment target
+- **Xcode 26+** (required: macOS 26 ships frameworks that Xcode 16.x cannot load,
+  and an iOS 26 device needs the matching SDK)
+- iOS 17.0+ deployment target (`@Observable` requires 17)
 - Swift 5.9+
-- macOS 12+
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
+
+### Generating the project
+```bash
+export DEVELOPMENT_TEAM=XXXXXXXXXX   # optional; otherwise pick the team in Xcode
+xcodegen generate
+```
 
 ### Building
 ```bash
-swift build
+swift build          # library modules only
 swift test
 ```
 
-### Running
+### Running on a device
 ```bash
-# Open in Xcode
-open Weekclip.xcworkspace
+xcodegen generate
+open Weekclip.xcodeproj
+```
+Then in Xcode: select the **Weekclip** scheme, pick your connected iPhone,
+set a team under *Signing & Capabilities*, and Run. On first launch the device
+will refuse the app until you trust the developer profile under
+*Settings > General > VPN & Device Management*.
 
-# Or build from command line
-swift build -c release
+Command-line equivalent:
+```bash
+xcodebuild -project Weekclip.xcodeproj -scheme Weekclip \
+  -destination 'platform=iOS,name=<YOUR IPHONE>' build
 ```
 
 ## Development

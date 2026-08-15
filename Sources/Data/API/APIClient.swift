@@ -1,5 +1,6 @@
 import Foundation
 import Alamofire
+import WeekclipShared
 
 /// Main API client for WeekClip service
 public class WeekclipAPIClient {
@@ -68,9 +69,6 @@ public class WeekclipAPIClient {
     }
   }
 }
-
-// Import needed for APIClient
-import WeekclipShared
 
 /// Error type for API operations
 enum APIError: LocalizedError {

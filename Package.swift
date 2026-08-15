@@ -5,7 +5,8 @@ let package = Package(
   name: "Weekclip",
   defaultLocalization: "en",
   platforms: [
-    .iOS(.v16)
+    // v17, not v16: MediaViewModel uses the @Observable macro (iOS 17+).
+    .iOS(.v17)
   ],
   products: [
     .library(name: "WeekclipShared", targets: ["WeekclipShared"]),
