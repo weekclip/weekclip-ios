@@ -6,7 +6,12 @@ let package = Package(
   defaultLocalization: "en",
   platforms: [
     // v17, not v16: MediaViewModel uses the @Observable macro (iOS 17+).
-    .iOS(.v17)
+    .iOS(.v17),
+    // The app only ships for iOS, but `swift build` / `swift test` (and CI)
+    // compile for the macOS host. Without this the host deployment target
+    // defaults to 10.13, where @Observable and async URLSession/Alamofire are
+    // all unavailable.
+    .macOS(.v14),
   ],
   products: [
     .library(name: "WeekclipShared", targets: ["WeekclipShared"]),
