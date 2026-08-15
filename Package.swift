@@ -1,17 +1,23 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
+// The four library modules the app target links. The app bundle itself is an
+// Xcode target (App/, generated from project.yml) — SwiftPM cannot produce an
+// iOS app bundle, which is ADR-0002 D3.
+//
+// iOS only. The previous manifest also declared .macOS(.v14), purely so that
+// `swift build` on a CI macOS host would compile; that host build never
+// produced anything shippable and was the reason CI looked busy while the app
+// was untestable. Everything now goes through xcodebuild against a simulator,
+// so the macOS platform line has no reader.
 let package = Package(
   name: "Weekclip",
   defaultLocalization: "en",
   platforms: [
-    // v17, not v16: MediaViewModel uses the @Observable macro (iOS 17+).
-    .iOS(.v17),
-    // The app only ships for iOS, but `swift build` / `swift test` (and CI)
-    // compile for the macOS host. Without this the host deployment target
-    // defaults to 10.13, where @Observable and async URLSession/Alamofire are
-    // all unavailable.
-    .macOS(.v14),
+    // v17 because @Observable is iOS 17+. Matches Android's minSdk 28 in
+    // spirit: old enough to include real devices, new enough to skip a
+    // compatibility layer nobody asked for.
+    .iOS(.v17)
   ],
   products: [
     .library(name: "WeekclipShared", targets: ["WeekclipShared"]),
@@ -19,73 +25,30 @@ let package = Package(
     .library(name: "WeekclipData", targets: ["WeekclipData"]),
     .library(name: "WeekclipPresentation", targets: ["WeekclipPresentation"]),
   ],
-  dependencies: [
-    // Networking
-    .package(url: "https://github.com/Alamofire/Alamofire.git", .upToNextMajor(from: "5.9.0")),
-
-    // Logging
-    .package(url: "https://github.com/apple/swift-log.git", .upToNextMajor(from: "1.5.0")),
-
-    // Testing
-    .package(url: "https://github.com/pointfreeco/swift-dependencies.git", .upToNextMajor(from: "1.0.0")),
-  ],
+  // No external dependencies, deliberately.
+  //
+  //  · Alamofire — rejected by ADR-0002 D4. PRD-0008 D8 needs background
+  //    URLSession under direct control, and wrapping the one path that matters
+  //    most would make it two layers deep for no gain.
+  //  · swift-log  — os.Logger is on every supported OS, integrates with
+  //    Console.app and sysdiagnose, and costs nothing to link.
+  //  · swift-dependencies — the composition root in
+  //    Presentation/Composition does manual DI in ~40 lines (ADR-0002's
+  //    "수동 DI"). A DI framework for one graph this size is not a trade.
+  dependencies: [],
   targets: [
-    // Shared utilities and models
-    .target(
-      name: "WeekclipShared",
-      dependencies: [
-        .product(name: "Logging", package: "swift-log"),
-      ],
-      path: "Sources/Shared"
-    ),
-
-    // Domain logic and use cases
-    .target(
-      name: "WeekclipDomain",
-      dependencies: [
-        "WeekclipShared",
-      ],
-      path: "Sources/Domain"
-    ),
-
-    // Data layer (API, repositories)
+    .target(name: "WeekclipShared", path: "Sources/Shared"),
+    .target(name: "WeekclipDomain", dependencies: ["WeekclipShared"], path: "Sources/Domain"),
     .target(
       name: "WeekclipData",
-      dependencies: [
-        "WeekclipShared",
-        "WeekclipDomain",
-        .product(name: "Alamofire", package: "Alamofire"),
-      ],
+      dependencies: ["WeekclipShared", "WeekclipDomain"],
       path: "Sources/Data"
     ),
-
-    // Presentation layer (SwiftUI views, ViewModels)
     .target(
       name: "WeekclipPresentation",
-      dependencies: [
-        "WeekclipShared",
-        "WeekclipDomain",
-        "WeekclipData",
-      ],
+      dependencies: ["WeekclipShared", "WeekclipDomain", "WeekclipData"],
       path: "Sources/Presentation"
     ),
-
-    // Tests
-    .testTarget(
-      name: "WeekclipDataTests",
-      dependencies: [
-        "WeekclipData",
-        .product(name: "Dependencies", package: "swift-dependencies"),
-      ],
-      path: "Tests/Data"
-    ),
-
-    .testTarget(
-      name: "WeekclipDomainTests",
-      dependencies: [
-        "WeekclipDomain",
-      ],
-      path: "Tests/Domain"
-    ),
-  ]
+  ],
+  swiftLanguageModes: [.v6]
 )

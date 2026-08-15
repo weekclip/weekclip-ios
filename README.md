@@ -1,139 +1,207 @@
-# WeekClip iOS
+# weekclip-ios
 
-Modern iOS native app for WeekClip with SwiftUI and MVVM architecture.
+Native iOS client for weekclip.
 
-## Architecture
+- **PRD**: `weekclip-harness/wiki/prd/PRD-0008-native-app-port.md`
+- **Stack decisions**: `weekclip-harness/wiki/adr/ADR-0002-native-app-stack.md`
+- **Port scope**: `docs/product/native-app-feature-inventory.md` (superrepo)
 
-### Modern Stack (2024-2026)
-- **UI Framework**: SwiftUI (declarative UI)
-- **Architecture Pattern**: MVVM + Clean Architecture (3-layer)
-- **State Management**: @Observable (iOS 17+) + Swift async/await
-- **Networking**: Alamofire + URLSession
-- **Async Concurrency**: Swift 6 structured concurrency
-- **Background Tasks**: URLSession background upload + BGTaskScheduler
-- **Package Management**: Swift Package Manager (SPM)
+## Stack
 
-### Project Structure
-```
-App/                    # iOS app shell (@main, Info.plist, assets) — the only
-                        # part that ships as an app target
-project.yml             # XcodeGen spec -> generates Weekclip.xcodeproj
-Package.swift           # SwiftPM package supplying the 4 library modules
+Every choice below has a recorded reason in ADR-0002. Where a decision looks
+unusual, the reason is in the third column — not in someone's memory.
 
-Sources/
-├── Shared/              # Common utilities, error types, logging
-├── Domain/              # Use cases, business logic
-├── Data/               # API client, repositories, network layer
-└── Presentation/       # SwiftUI views, ViewModels
+| Area | Choice | Why |
+|------|--------|-----|
+| UI | SwiftUI | Default for new apps |
+| State | `@Observable` | SwiftUI tracks the properties a view actually reads; `ObservableObject` invalidates every observer on any change |
+| Concurrency | Swift 6 language mode | Strict concurrency, on both the package and the app target |
+| Navigation | `NavigationStack` + typed path | A deep link becomes "append a `WeekclipRoute`" |
+| DI | **Manual** (composition root) | The whole graph is ~40 lines in `AppContainer`. ADR-0002 |
+| Networking | **`URLSession`, no wrapper** | PRD-0008 D8 needs background `URLSession` under direct control; a wrapper would leave the most important path bypassing it. ADR-0002 D4 |
+| Playback | AVPlayer / AVKit | HLS is native, no dependency needed |
+| Background upload | background `URLSession` (file-based) | Phase 5. iOS cannot stream a background body — every multipart part needs a temp file |
+| Secure storage | Keychain | — |
+| Project definition | **XcodeGen**, `.xcodeproj` gitignored | The definition stays reviewable text and CI regenerates it. ADR-0002 D3 |
+| Identifier | `cc.sunglint.weekclip` | Same on both platforms. ADR-0002 D7 |
 
-Tests/
-├── Domain/
-└── Data/
-```
+**No external dependencies.** `Package.swift` declares none. Alamofire was
+removed (D4), swift-log was replaced by `os.Logger`, and swift-dependencies was
+replaced by the composition root.
 
-`Weekclip.xcodeproj` is **generated and gitignored**. Never edit it by hand —
-change `project.yml` and regenerate.
+**No payment code, ever.** PRD-0008 D3 requires zero payment-related strings in
+the app binary; `scripts/check-no-payment-strings.sh` gates it in CI (N6).
+Capacity shortfall is reported as a plain fact — no price, no top-up path, no
+"buy on the web". This is the platform the rule exists for: Apple Guideline
+3.1.1 judges what the binary says.
 
-## Setup
+## Requirements
 
-### Prerequisites
-- **Xcode 26+** (required: macOS 26 ships frameworks that Xcode 16.x cannot load,
-  and an iOS 26 device needs the matching SDK)
-- iOS 17.0+ deployment target (`@Observable` requires 17)
-- Swift 5.9+
+- **Xcode 26+**. App Store Connect has required the iOS 26 SDK since 2026-04-28,
+  and CI runners are on 26 — building locally against an older SDK would be a
+  drift you find at upload time.
+- An **iOS simulator runtime**: `xcodebuild -downloadPlatform iOS` (~8 GB).
+  Xcode 26 does not install one by default, and without it there is nothing to
+  run tests on.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
+- `swift-format` needs no install — it ships inside the Xcode toolchain.
 
-### Generating the project
+## Build
+
+`.xcodeproj` is generated and gitignored. Never edit it by hand; change
+`project.yml` and regenerate.
+
 ```bash
-export DEVELOPMENT_TEAM=XXXXXXXXXX   # optional; otherwise pick the team in Xcode
 xcodegen generate
+
+# Build and test on a simulator. scripts/pick-simulator.sh chooses one that
+# actually exists rather than hardcoding a model name.
+UDID=$(./scripts/pick-simulator.sh)
+xcodebuild build -project Weekclip.xcodeproj -scheme Weekclip \
+  -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build
+xcodebuild test  -project Weekclip.xcodeproj -scheme Weekclip \
+  -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build
+
+xcrun swift-format lint --strict --recursive \
+  --configuration .swift-format Sources Tests App
 ```
 
-### Building
-```bash
-swift build          # library modules only
-swift test
-```
+> There is no `swift build`. It compiles the library modules for the **macOS
+> host**, which never touches the app bundle — that host build is why this
+> repo's CI looked busy for weeks while the app was untestable. Everything goes
+> through `xcodebuild` against a simulator.
 
 ### Running on a device
+
 ```bash
-xcodegen generate
-open Weekclip.xcodeproj
+open Weekclip.xcodeproj    # pick your iPhone, Run
 ```
-Then in Xcode: select the **Weekclip** scheme, pick your connected iPhone,
-set a team under *Signing & Capabilities*, and Run. On first launch the device
-will refuse the app until you trust the developer profile under
-*Settings > General > VPN & Device Management*.
 
-Command-line equivalent — build, install, launch:
+Command-line equivalent:
+
 ```bash
-DEVICE=$(xcrun devicectl list devices | awk '/connected/ {print $3; exit}')
-
+DEVICE=$(xcrun devicectl list devices | awk '/connected/ {print $(NF-1); exit}')
 xcodebuild -project Weekclip.xcodeproj -scheme Weekclip \
   -destination "platform=iOS,id=$DEVICE" -derivedDataPath build \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
-
 xcrun devicectl device install app --device "$DEVICE" \
   build/Build/Products/Debug-iphoneos/WeekClip.app
 xcrun devicectl device process launch --device "$DEVICE" \
-  --terminate-existing com.weekclip.ios
+  --terminate-existing cc.sunglint.weekclip
 ```
 
-`-allowProvisioningDeviceRegistration` is required in addition to
+`-allowProvisioningDeviceRegistration` is needed in addition to
 `-allowProvisioningUpdates` the first time a given device is used; without it
 the build fails with "Device isn't registered in your developer account".
 
-### Troubleshooting
-
 | Symptom | Cause / fix |
 |---|---|
-| Everything Xcode-related aborts with `Symbol not found: _XPCTypeBool` | A stale `/Library/Developer/PrivateFrameworks/CoreDevice.framework` left by an older Xcode. Fix: `sudo xcodebuild -runFirstLaunch` |
+| Everything Xcode-related aborts with `Symbol not found: _XPCTypeBool` | A stale `/Library/Developer/PrivateFrameworks/CoreDevice.framework` from an older Xcode. `sudo xcodebuild -runFirstLaunch` |
 | `Developer Mode disabled` | On the phone: Settings > Privacy & Security > Developer Mode > on, then reboot |
-| `CodeSign ... errSecInternalComponent` | codesign cannot reach the private key. Build once from the Xcode GUI and choose *Always Allow*, or run `security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db` |
+| `CodeSign ... errSecInternalComponent` | codesign cannot reach the private key. Build once from the Xcode GUI and choose *Always Allow*, or `security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db` |
 
-## Development
+## UI verification (Maestro)
 
-### Code Style
-- Swift with consistent formatting
-- Modern Swift 6 concurrency patterns
-- Value types (structs) preferred over reference types
-- @Observable for state management (replacing Combine boilerplate)
+Unit tests never construct the app, so nothing else here can tell you it
+launches. `maestro/` drives the installed app and reports back machine-readably.
 
-### Testing
-- Unit tests with XCTest
-- Integration tests with mock API client
-- Swift async/await for test code
+```bash
+./scripts/run-maestro.sh                    # simulator (boots one if needed)
+./scripts/run-maestro.sh --device           # USB-attached iPhone
+./scripts/run-maestro.sh --require-device   # never skip — for any automated caller
+```
 
-## Key Features
+Needs the [Maestro](https://maestro.dev) CLI:
+`curl -fsSL "https://get.maestro.mobile.dev" | bash`. Results land in
+`build/maestro/`: JUnit XML, plus a screenshot and view hierarchy for each
+failing step.
 
-### Current
-- [x] Modern SwiftUI framework
-- [x] Modular architecture with SPM
-- [x] API client with Alamofire
-- [x] MVVM state management
+Simulator-first, unlike the Android twin — there the emulator is unusable on the
+dev Mac (see `weekclip-android/maestro/README.md`), here it works and matches
+what CI builds. `--device` exists because PRD-0008's deep-link and
+background-upload DoDs will need real hardware.
 
-### Planned
-- [ ] Video playback with native player
-- [ ] Background upload with URLSession
-- [ ] Scheduled WiFi upload with BGTaskScheduler
-- [ ] Photo gallery integration
-- [ ] User authentication with OAuth
+**For agents:** `.mcp.json` registers Maestro's MCP server (it ships inside the
+CLI), exposing `inspect_screen`, `take_screenshot` and `run` — enough to look at
+the screen, act on it, and check the result without writing a flow file first.
 
-## Background Task Architecture
+CI runs `maestro check-syntax` on every flow. It cannot run the flows
+themselves — that needs a booted simulator with the app installed.
 
-### URLSession Background Upload
-- Non-resumable uploads use standard URLSession
-- Resumable uploads use background URLSessionConfiguration
-- Automatic retry on network changes
+## Layout
 
-### BGTaskScheduler Integration
-- Process info background tasks for scheduled uploads
-- WiFi-only constraint for off-peak uploads
-- Battery optimization aware
+Four modules, dependencies pointing inward: `Presentation` → `Domain` ← `Data`.
+The views never name a `URLSession` or decoding type; `Domain` imports only
+`WeekclipShared`.
 
-## References
-- [SwiftUI Documentation](https://developer.apple.com/swiftui/)
-- [URLSession Background Transfer Guide](https://developer.apple.com/documentation/foundation/urlsession/downloading_files_in_the_background)
-- [BGTaskScheduler](https://developer.apple.com/documentation/backgroundtasks/bgtaskscheduler)
-- [Swift Concurrency](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/concurrency)
-- [Swift Package Manager](https://www.swift.org/package-manager/)
+```
+App/                          # the app target — @main, Info.plist, assets,
+                              # signing. Nothing else (ADR-0002 D3)
+project.yml                   # XcodeGen spec -> Weekclip.xcodeproj
+Package.swift                 # the four library modules
+
+Sources/
+├── Shared/                   # AppError (the closed failure set), AppLog
+├── Domain/                   # models, repository protocols, use cases
+├── Data/
+│   ├── API/                  # APIClient (URLSession), endpoints, envelope,
+│   │                         # session-token seam
+│   ├── DTO/                  # wire shapes + mapping to domain
+│   └── Repository/           # implementations of the domain protocols
+└── Presentation/
+    ├── Navigation/           # WeekclipRoute — the deep-link contract
+    ├── Composition/          # AppContainer, the only place the graph is built
+    ├── Dashboard/            # the reference screen
+    └── RootView.swift        # NavigationStack + onOpenURL
+
+Tests/WeekclipTests/          # an Xcode test target, not a SwiftPM one, so
+                              # tests run on the simulator rather than the host
+```
+
+### The route table is a contract
+
+`Presentation/Navigation/WeekclipRoute.swift` mirrors weekclip-web's URLs
+one-for-one, and `WeekclipRoutes.kt` in weekclip-android mirrors the same ones.
+That is load-bearing: PRD-0008 D4 routes `/studios/:id/media/:mid`,
+`/invite/:token` and `/share/:token` into the app via Universal Links. If the
+three drift apart, deep links stop resolving — silently, on other people's
+phones.
+
+`WeekclipRouteTests` writes the expected paths out as literals rather than
+deriving them, because a test derived from the type under test agrees with any
+change, including a wrong one. It also asserts that `/pricing` resolves to
+**nil**: paths the app does not own must go to the browser, not be guessed at.
+
+### Errors are a closed set
+
+`AppError` is what the UI is allowed to see; `APIClient` is the only place
+transport failures become one. The `switch` in `DashboardView` is therefore
+exhaustive, and adding a case breaks the build at every screen that has to
+decide what to say about it.
+
+`AppError` carries no user-facing copy. The previous version did, and one of
+those strings — "Please upgrade your plan or delete some content" — is precisely
+what Guideline 3.1.1 rejects.
+
+### The dashboard is the reference screen
+
+`Presentation/Dashboard/` is the shape every Phase 5 screen should copy, and the
+vertical slice that proves the spine is connected: it runs a real `GET /studios`
+against the contract in weekclip-api. `StudioRepositoryContractTests` pins that
+contract with a `URLProtocol` stub — real response bytes through the real
+request pipeline, because a stub of the repository would skip the envelope,
+which is the part most likely to be wrong.
+
+## Status
+
+Spine, not features. The dashboard is real and reaches the live API; every other
+destination is still a placeholder. Feature work is Phase 5 of PRD-0008.
+
+Not built yet, on purpose:
+
+| Missing | Why it is not here |
+|---|---|
+| Local cache | PRD-0008 states no offline requirement. A schema with no read path is a migration liability from day one; `StudioRepository` is the seam that makes one addable |
+| Auth / Keychain session storage | Task 148.5. `SessionTokenProvider` is the seam — today it returns nil and requests come back 401, which the UI already renders |
+| Universal Links entitlement | Task 148.5, and it needs `apple-app-site-association` served from `weekclip.com` first. `WeekclipRoute(url:)` is the half that lives here, and it is tested |
+| TestFlight upload | Task 148.4c. Needs signing secrets in the value ledger (`secrets/*.enc.yaml`), not in a console |

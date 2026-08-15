@@ -1,7 +1,11 @@
 name: Weekclip
 
 options:
-  bundleIdPrefix: com.weekclip
+  # cc.sunglint, not com.weekclip: PRD-0008 fixed `cc.sunglint.weekclip` for
+  # BOTH platforms on 2026-08-14 (ADR-0002 D7), and the Android app already
+  # ships under it. Two identifiers for one product is a mess that surfaces at
+  # the worst moment — Universal Links, App Store Connect, push.
+  bundleIdPrefix: cc.sunglint
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -25,26 +29,62 @@ targets:
         product: WeekclipPresentation
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.weekclip.ios
+        PRODUCT_BUNDLE_IDENTIFIER: cc.sunglint.weekclip
         PRODUCT_NAME: WeekClip
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_FILE: App/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-        SWIFT_VERSION: "5.9"
+        # Swift 6 language mode — strict concurrency is the point (ADR-0002's
+        # stack table). Set here as well as in Package.swift because the app
+        # target's own sources are compiled by Xcode, not SwiftPM.
+        SWIFT_VERSION: "6.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_STYLE: Automatic
         # Team ID (the OU of the Apple Development certificate), not secret.
         DEVELOPMENT_TEAM: Q8J5K74H37
 
+  WeekclipTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/WeekclipTests
+    dependencies:
+      - target: Weekclip
+      # The tests exercise the library modules directly, through their public
+      # API. They are declared here rather than as SwiftPM test targets because
+      # `swift test` would compile them for the macOS host — the same host build
+      # that made this repo's CI look busy while the app was untestable.
+      - package: Weekclip
+        product: WeekclipShared
+      - package: Weekclip
+        product: WeekclipDomain
+      - package: Weekclip
+        product: WeekclipData
+      - package: Weekclip
+        product: WeekclipPresentation
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        # Hosted by the app so anything touching UIKit/SwiftUI has a real
+        # application around it.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/WeekClip.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WeekClip"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
 schemes:
   Weekclip:
     build:
       targets:
         Weekclip: all
+        WeekclipTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - WeekclipTests
     archive:
       config: Release
