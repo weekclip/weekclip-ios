@@ -50,10 +50,10 @@ struct DashboardViewModelTests {
   func startsLoading() {
     let viewModel = makeViewModel(StubRepository(.success([])))
 
-    #expect(viewModel.isLoading)
-    #expect(viewModel.studios.isEmpty)
+    #expect(viewModel.state.isLoading)
+    #expect(viewModel.state.studios.isEmpty)
     // Not empty yet — "no studios" and "not loaded" must not look the same.
-    #expect(!viewModel.isEmpty)
+    #expect(!viewModel.state.isEmpty)
   }
 
   @Test("a successful load clears loading and publishes the rows")
@@ -62,9 +62,9 @@ struct DashboardViewModelTests {
 
     await viewModel.load()
 
-    #expect(!viewModel.isLoading)
-    #expect(viewModel.studios.map(\.name) == ["Family"])
-    #expect(viewModel.error == nil)
+    #expect(!viewModel.state.isLoading)
+    #expect(viewModel.state.studios.map(\.name) == ["Family"])
+    #expect(viewModel.state.error == nil)
   }
 
   @Test("a failure clears loading and exposes the error")
@@ -73,8 +73,8 @@ struct DashboardViewModelTests {
 
     await viewModel.load()
 
-    #expect(!viewModel.isLoading)
-    #expect(viewModel.error == .offline)
+    #expect(!viewModel.state.isLoading)
+    #expect(viewModel.state.error == .offline)
   }
 
   @Test("an empty result reads as empty only once loading is done")
@@ -83,7 +83,7 @@ struct DashboardViewModelTests {
 
     await viewModel.load()
 
-    #expect(viewModel.isEmpty)
+    #expect(viewModel.state.isEmpty)
   }
 
   @Test("a failed refresh keeps the rows that are already on screen")
@@ -91,16 +91,16 @@ struct DashboardViewModelTests {
     let repository = StubRepository(.success([studio("1", "Family")]))
     let viewModel = makeViewModel(repository)
     await viewModel.load()
-    #expect(viewModel.studios.count == 1)
+    #expect(viewModel.state.studios.count == 1)
 
     repository.response = .failure(.timeout)
     await viewModel.refresh()
 
-    #expect(viewModel.error == .timeout)
+    #expect(viewModel.state.error == .timeout)
     // The regression this guards: wiping real content because a background
     // reload failed.
-    #expect(viewModel.studios.count == 1)
-    #expect(!viewModel.isRefreshing)
+    #expect(viewModel.state.studios.count == 1)
+    #expect(!viewModel.state.isRefreshing)
   }
 
   @Test("refresh does not raise the full-screen loader that hides the list")
@@ -115,8 +115,8 @@ struct DashboardViewModelTests {
     // reuses load()'s isLoading = true.
     await viewModel.refresh()
 
-    #expect(!viewModel.isLoading)
-    #expect(viewModel.studios.count == 1)
+    #expect(!viewModel.state.isLoading)
+    #expect(viewModel.state.studios.count == 1)
   }
 
   @Test("the use case orders most-recently-updated first")
@@ -133,7 +133,7 @@ struct DashboardViewModelTests {
 
     // Same rule as GetStudiosUseCase in weekclip-android. The two clients
     // sorting differently would be a bug nobody files and everybody notices.
-    #expect(viewModel.studios.map(\.name) == ["Newer", "Older"])
+    #expect(viewModel.state.studios.map(\.name) == ["Newer", "Older"])
   }
 
   @Test("studios with no timestamp sort last, then by name")
@@ -149,6 +149,6 @@ struct DashboardViewModelTests {
 
     await viewModel.load()
 
-    #expect(viewModel.studios.map(\.name) == ["Dated", "Alpha", "Bravo"])
+    #expect(viewModel.state.studios.map(\.name) == ["Dated", "Alpha", "Bravo"])
   }
 }

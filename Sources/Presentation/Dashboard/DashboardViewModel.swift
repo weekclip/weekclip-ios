@@ -6,13 +6,12 @@ import WeekclipShared
 /// Dashboard state holder.
 ///
 /// The reference shape for every screen that follows (PRD-0008 Phase 5): one
-/// observable state object, all work in a `Task`, no SwiftUI types in here.
+/// observable `DashboardUiState`, all work in a `Task`, no SwiftUI types in here.
 ///
 /// `@Observable` rather than `ObservableObject` (ADR-0002): SwiftUI tracks the
-/// individual properties a view actually reads, so a change to `isRefreshing`
-/// does not invalidate a view that only reads `studios`. With
-/// `@Published`/`objectWillChange` every view observing the object recomputes
-/// regardless.
+/// individual properties a view actually reads, so a change no view reads does
+/// not invalidate anything. With `@Published`/`objectWillChange` every view
+/// observing the object recomputes regardless.
 ///
 /// `@MainActor` on the type, not on individual methods. State a view reads must
 /// be main-isolated, and annotating piecemeal is how you end up with the one
@@ -20,15 +19,7 @@ import WeekclipShared
 @MainActor
 @Observable
 public final class DashboardViewModel {
-  /// Full-screen loader. Distinct from `isRefreshing` so a reload does not
-  /// blank out the list that is already on screen.
-  public private(set) var isLoading = true
-  public private(set) var isRefreshing = false
-  public private(set) var studios: [Studio] = []
-  public private(set) var error: AppError?
-
-  /// Distinguishes "no studios" from "not loaded yet", which look the same.
-  public var isEmpty: Bool { !isLoading && error == nil && studios.isEmpty }
+  public private(set) var state = DashboardUiState()
 
   private let getStudios: GetStudios
 
@@ -47,26 +38,26 @@ public final class DashboardViewModel {
   }
 
   private func run(isRefresh: Bool) async {
-    isLoading = !isRefresh
-    isRefreshing = isRefresh
+    state.isLoading = !isRefresh
+    state.isRefreshing = isRefresh
     // Clear the previous error now: leaving it up while a retry is in flight
     // shows a failure and a spinner at the same time.
-    error = nil
+    state.error = nil
 
     let result = await getStudios()
 
-    isLoading = false
-    isRefreshing = false
+    state.isLoading = false
+    state.isRefreshing = false
 
     switch result {
     case .success(let studios):
-      self.studios = studios
-      self.error = nil
+      state.studios = studios
+      state.error = nil
     case .failure(let error):
       // The already-loaded list stays on screen. Replacing real rows with an
       // error because a background reload failed is a regression the user did
       // not ask for.
-      self.error = error
+      state.error = error
       AppLog.ui.error("dashboard load failed: \(String(describing: error), privacy: .public)")
     }
   }

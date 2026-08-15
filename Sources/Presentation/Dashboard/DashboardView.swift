@@ -29,13 +29,13 @@ public struct DashboardView: View {
 
   @ViewBuilder
   private var content: some View {
-    if viewModel.isLoading {
+    if viewModel.state.showFullScreenLoader {
       ProgressView()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("dashboard-loading")
-    } else if let error = viewModel.error {
+    } else if let error = viewModel.state.error {
       errorState(error)
-    } else if viewModel.isEmpty {
+    } else if viewModel.state.isEmpty {
       ContentUnavailableView(
         "No studios yet",
         systemImage: "rectangle.stack",
@@ -43,7 +43,7 @@ public struct DashboardView: View {
       )
       .accessibilityIdentifier("dashboard-empty")
     } else {
-      List(viewModel.studios) { studio in
+      List(viewModel.state.studios) { studio in
         Button {
           onSelect(studio)
         } label: {
