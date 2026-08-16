@@ -36,6 +36,26 @@
 	<string>$(WEEKCLIP_DEBUG_SIGN_IN_EMAIL)</string>
 	<key>WeekclipDebugSignInPassword</key>
 	<string>$(WEEKCLIP_DEBUG_SIGN_IN_PASSWORD)</string>
+	<!-- Bundled brand faces (Inter + Space Grotesk, both SIL OFL; licences ship
+	     in Resources/Licenses/). iOS does NOT register a font just because it is
+	     in the bundle — it registers what this array names, and a font that is
+	     present but unlisted resolves to nil at `Font.custom`, which SwiftUI
+	     silently renders as San Francisco. That failure looks like "the design
+	     didn't land", not like an error, so `BrandAssetsTests` asserts every
+	     PostScript name resolves rather than trusting this list.
+
+	     Names are file names, not PostScript names: Xcode flattens resources
+	     into the bundle root, so the subdirectory is not part of the value. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>Inter-Regular.ttf</string>
+		<string>Inter-Medium.ttf</string>
+		<string>Inter-SemiBold.ttf</string>
+		<string>Inter-Bold.ttf</string>
+		<string>SpaceGrotesk-Regular.ttf</string>
+		<string>SpaceGrotesk-Medium.ttf</string>
+		<string>SpaceGrotesk-Bold.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

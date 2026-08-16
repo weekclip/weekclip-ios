@@ -21,6 +21,16 @@ public struct DashboardView: View {
   public var body: some View {
     content
       .navigationTitle(Text("Studios", comment: "Dashboard screen title"))
+      // The start destination, so this is the app's masthead. The mark goes in
+      // the bar's leading slot rather than `.principal`, which would REPLACE
+      // the title view — and `maestro/smoke.yaml` asserts the literal text
+      // "Studios" is visible. The root of the stack has no back button, so the
+      // slot is free.
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          WeekclipLogoMark(size: .small)
+        }
+      }
       // `.task` and not `.onAppear`: it is cancelled when the view goes away,
       // so a fast back-swipe does not leave a request running against a view
       // model nobody will read.
@@ -59,9 +69,9 @@ public struct DashboardView: View {
   private func row(_ studio: Studio) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(studio.name)
-        .font(.headline)
+        .font(.weekclip(.headline))
       Text(roleLabel(studio.role))
-        .font(.caption)
+        .font(.weekclip(.caption))
         .foregroundStyle(.secondary)
     }
     // One element instead of two, so VoiceOver announces "Family, Owner"
@@ -72,10 +82,12 @@ public struct DashboardView: View {
   private func errorState(_ error: AppError) -> some View {
     VStack(spacing: 12) {
       Text(message(for: error))
+        .font(.weekclip(.body))
         .multilineTextAlignment(.center)
       Button("Try again") {
         Task { await viewModel.refresh() }
       }
+      .font(.weekclip(.callout))
       .accessibilityIdentifier("dashboard-retry")
     }
     .padding()
