@@ -49,6 +49,7 @@ struct PkceChallengeTests {
   func deterministic() {
     let fixed: (Int) -> Data = { count in Data((0..<count).map { UInt8($0 % 256) }) }
 
-    #expect(PkceChallenge.generate(randomBytes: fixed) == PkceChallenge.generate(randomBytes: fixed))
+    #expect(
+      PkceChallenge.generate(randomBytes: fixed) == PkceChallenge.generate(randomBytes: fixed))
   }
 }

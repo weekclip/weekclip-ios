@@ -68,7 +68,8 @@ public final class AppContainer {
   /// and a preview shows the login screen, which is the honest answer for a
   /// container with no session.
   public func makeAuthGateModel() -> AuthGateModel {
-    AuthGateModel(sessionManager: sessionManager ?? Self.emptySessionManager(), flowStore: flowStore)
+    AuthGateModel(
+      sessionManager: sessionManager ?? Self.emptySessionManager(), flowStore: flowStore)
   }
 
   public func makeLoginViewModel() -> LoginViewModel {

@@ -18,8 +18,10 @@ import WeekclipShared
 /// mean "sign the user out", while a failed exchange means "the sign-in did not
 /// take" and there was no session to lose.
 public protocol AuthRepository: Sendable {
-  /// - Parameter verifier: the PKCE verifier this process generated before
-  ///   opening the browser, read back from `SignInFlowStore`.
+  /// - Parameters:
+  ///   - code: the authorization code the redirect carried.
+  ///   - verifier: the PKCE verifier this process generated before opening the
+  ///     browser, read back from `SignInFlowStore`.
   /// - Returns: the grant. Storing it is the caller's job — `SessionManager`
   ///   owns that, and this layer deliberately does not reach into it.
   func exchangeAuthCode(code: String, verifier: String) async -> Result<ProfileSession, AppError>

@@ -54,7 +54,8 @@ struct SupabaseAuthRepositoryTests {
     _ = await repository.exchangeAuthCode(code: "code-1", verifier: "verifier-1")
 
     let request = try #require(sent)
-    #expect(request.url?.absoluteString == "https://project.supabase.co/auth/v1/token?grant_type=pkce")
+    #expect(
+      request.url?.absoluteString == "https://project.supabase.co/auth/v1/token?grant_type=pkce")
     #expect(request.value(forHTTPHeaderField: "apikey") == "anon-key")
 
     // URLProtocol strips httpBody into httpBodyStream, so read it back out.
