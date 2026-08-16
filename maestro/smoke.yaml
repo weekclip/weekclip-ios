@@ -3,31 +3,66 @@ name: skeleton-smoke
 tags:
   - smoke
 ---
-# The app launches, renders its start destination, and completes one full pass
-# through the spine. A composition-root or SwiftUI wiring mistake fails here and
-# nowhere in the unit tests, which never construct the app.
+# The app launches, renders the first gate, and — when this build can sign in —
+# completes one full pass through the spine behind it. A composition-root or
+# SwiftUI wiring mistake fails here and nowhere in the unit tests, which never
+# construct the app.
 - launchApp:
     clearState: true
 
 # By id, not by copy. SwiftUI does not derive an accessibility identifier from a
-# label, so these are set explicitly in DashboardView — and this assertion is
-# what proves they are still there. Drop one and the selector silently matches
+# label, so these are set explicitly in the views — and this assertion is what
+# proves they are still there. Drop one and the selector silently matches
 # nothing.
-- assertVisible: "Studios"
+- assertVisible:
+    id: "screen-title"
 
-# The real claim. `dashboard-loading` is the initial state, so its *disappearance*
-# means AppContainer built the graph, GetStudios ran, the repository answered,
-# and the new state reached SwiftUI. Whether the answer was a list or an error
-# does not matter here — both clear `isLoading`, and which one you get depends on
-# whether this machine can reach the WAF-gated dev API. This flow asserts the
-# spine, not the network.
-# 45s, not 15s. The wait has to outlast the HTTP client, or a slow network
-# fails this flow before the request itself gives up — and the report would
-# blame the app. APIClient.defaultSession() budgets 15s per request / 30s per
-# resource, so 45s is that ceiling plus room to draw.
-- extendedWaitUntil:
-    notVisible:
-      id: "dashboard-loading"
-    timeout: 45000
+# The gate itself (PRD-0008 D4). `clearState` guarantees no stored session, so
+# the first screen must be this one. Before #148's login task the same launch
+# landed on the dashboard — if this ever passes on `dashboard-list` again, the
+# gate has been bypassed rather than the flow having gone stale.
+- assertVisible:
+    id: "login-google"
 
-- takeScreenshot: dashboard
+# The dashboard must NOT be reachable from here. Stating the negative is the
+# point: "login is visible" would still hold if the app rendered both.
+- assertNotVisible: "Studios"
+
+- takeScreenshot: login
+
+# Everything below needs a session, and only a build carrying credentials has a
+# way to get one without a Google round trip. `AppContainer` passes a nil
+# action otherwise, so the button is absent and this branch skips instead of
+# failing — and, unlike a skip we invented, the condition is the same fact the
+# user sees on screen.
+- runFlow:
+    when:
+      visible:
+        id: "login-debug"
+    commands:
+      - tapOn:
+          id: "login-debug"
+
+      # The real claim. Crossing the gate means SessionManager adopted a live
+      # grant, the gate's stream delivered the change, the NavigationStack was
+      # constructed, GetStudios ran, and the answer reached SwiftUI.
+      # `dashboard-loading` disappearing is the last of those.
+      #
+      # Whether the answer was a list or an error does not matter here — both
+      # clear `isLoading`, and which one you get depends on whether this machine
+      # can reach the WAF-gated dev API. This flow asserts the spine, not the
+      # network.
+      #
+      # 45s, not 15s. The wait has to outlast the HTTP client, or a slow network
+      # fails this flow before the request itself gives up — and the report
+      # would blame the app. APIClient.defaultSession() budgets 15s per request
+      # / 30s per resource, so 45s is that ceiling plus room to draw.
+      - extendedWaitUntil:
+          visible: "Studios"
+          timeout: 45000
+      - extendedWaitUntil:
+          notVisible:
+            id: "dashboard-loading"
+          timeout: 45000
+
+      - takeScreenshot: dashboard

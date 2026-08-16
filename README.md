@@ -117,19 +117,25 @@ xcodebuild build -project Weekclip.xcodeproj -scheme Weekclip \
   WEEKCLIP_DEBUG_SIGN_IN_PASSWORD="$($V get dev CAPTURE_BOT_PASSWORD)"
 ```
 
-`Info.plist` expands them; `AuthConfig` and `DebugAutoSignIn` read them from
-there. With them set, a debug build signs in **once** on first launch and
-restores the stored session on every launch after:
+`Info.plist` expands them; `AuthConfig` and `DebugPasswordSignIn` read them from
+there. With them set, the login screen grows a second, debug-only button —
+**Sign in with a password (debug)** — beside "Continue with Google". Without
+them it does not appear at all, which is deliberate: a button guaranteed to fail
+is worse than no button.
+
+Tapping it signs in and stores the session; every launch after that restores it
+and never reaches the login screen:
 
 ```bash
 xcrun simctl spawn <udid> log show --info --style compact --start "<time>" \
   --predicate 'subsystem == "cc.sunglint.weekclip" AND category == "session"'
 ```
 
-tells you which happened — `signed in` vs `restored a stored session … no
-network needed` — and that difference is the point of the feature. Without them
-the app behaves like a release build: no session, `AppError.unauthorized`, error
-screen.
+tells you which happened — `signed in as …; session stored` on the first tap,
+and on every launch after, no sign-in line at all because the gate never showed
+the login screen. That difference is the point of the feature. Without the
+credentials the app behaves like a release build: the gate offers only Google,
+which needs the Supabase redirect entry below.
 
 > ⚠️ **The dev API is behind a WAF that allows exactly one address** — the
 > WireGuard egress `158.247.237.200` (superrepo
@@ -245,7 +251,7 @@ Not built yet, on purpose:
 | Missing | Why it is not here |
 |---|---|
 | Local cache | PRD-0008 states no offline requirement. A schema with no read path is a migration liability from day one; `StudioRepository` is the seam that makes one addable |
-| Sign-in (Google OAuth) | Task 148.5c-b, and it is **blocked on console work** — an iOS OAuth client and a redirect URL registered with Supabase. Google is the product's only login (weekclip-web `LoginPage.tsx`). Until then a **debug-only** password sign-in stands in; see "Running against dev" |
+| Google sign-in, **proven against Google** | The flow is built and tested — `SupabaseOAuth`, `PkceChallenge`, `ASWebAuthenticationSession`, the exchange, the gate. What is missing is one console line: `cc.sunglint.weekclip://auth-callback` in Supabase Auth → **Redirect URLs**, per project. No *Google* OAuth client is needed — the app opens Supabase's `/auth/v1/authorize`, and Google only ever sees Supabase's own client id and HTTPS callback (measured 2026-08-16). Until that entry exists the sheet completes at Google and then sits on the website instead of returning, because GoTrue validates `redirect_to` at callback time; the debug password button is the way round it |
 | Guest / share session storage | PRD-0008 D5 needs one, but nothing writes it yet: a share session is minted by entering a link's password on a screen that does not exist (task 148.7). The **axis** is real and tested — `SessionAxis` routes `/api/v1/share/*` away from the profile bearer, so the store plugs in behind `SessionCredentialProvider` without `APIClient` or a repository changing |
 | Universal Links, verified end to end | The entitlement (`App/Weekclip.entitlements`) and the parser (`WeekclipRoute(url:)`) are both here and tested. What is missing is the other end: `apple-app-site-association` has to be **deployed** to weekclip.com (weekclip-web#203) before Apple's CDN can read it, and until then links keep opening the browser — which is today's behaviour, so nothing regresses |
 | TestFlight upload | Task 148.4c. Needs signing secrets in the value ledger (`secrets/*.enc.yaml`), not in a console |

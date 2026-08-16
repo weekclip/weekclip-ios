@@ -32,6 +32,7 @@ public actor SessionManager {
   private var cached: ProfileSession?
   private var loadedFromStore = false
   private var inFlightRefresh: Task<RefreshOutcome, Never>?
+  private var continuation: AsyncStream<SessionState>.Continuation?
 
   public init(
     store: any SessionStore,
@@ -49,6 +50,36 @@ public actor SessionManager {
     guard loadedFromStore else { return .unknown }
     guard let cached else { return .signedOut }
     return .signedIn(userID: cached.userID)
+  }
+
+  /// Every state this manager takes, from now on.
+  ///
+  /// The auth gate is the one consumer, and it exists because **not every
+  /// sign-out is something the UI initiated**. A refresh token that GoTrue
+  /// rejects signs the user out from inside `apply(_:)`, several layers below
+  /// any view; without a stream the app would keep showing the dashboard,
+  /// failing every request, while the gate went on believing there was a
+  /// session. The Android twin gets this for free — `SessionManager.state` is
+  /// a `StateFlow` there — and adding it here rather than polling is what keeps
+  /// the two descriptions of the gate the same.
+  ///
+  /// **Single consumer, and deliberately so.** A second call replaces the
+  /// continuation and silently ends the first stream. Broadcasting to many
+  /// would mean tracking them, and nothing in this app has ever wanted two: the
+  /// gate is a singleton at the root of the view tree.
+  ///
+  /// The current state is yielded immediately, so a consumer that subscribes
+  /// after the store has already been read does not wait for the next change
+  /// that may never come.
+  public func stateStream() -> AsyncStream<SessionState> {
+    let (stream, continuation) = AsyncStream<SessionState>.makeStream()
+    self.continuation = continuation
+    continuation.yield(state)
+    return stream
+  }
+
+  private func publish() {
+    continuation?.yield(state)
   }
 
   /// The token to put on the next request, refreshing first if it is about to
@@ -101,6 +132,7 @@ public actor SessionManager {
     if !loadedFromStore {
       cached = await store.read()
       loadedFromStore = true
+      publish()
     }
     return cached
   }
@@ -189,11 +221,13 @@ public actor SessionManager {
     await store.write(session)
     cached = session
     loadedFromStore = true
+    publish()
   }
 
   private func clear() async {
     await store.clear()
     cached = nil
     loadedFromStore = true
+    publish()
   }
 }
