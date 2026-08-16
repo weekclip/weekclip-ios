@@ -24,6 +24,7 @@ public final class AppContainer {
   /// never make a request, so there is no session to manage.
   private let sessionManager: SessionManager?
   private let authConfig: AuthConfig
+  private let flowStore: SignInFlowStore
 
   public init(endpoints: APIEndpoints = .current, authConfig: AuthConfig = .current) {
     let manager = SessionManager(
@@ -39,6 +40,7 @@ public final class AppContainer {
 
     self.sessionManager = manager
     self.authConfig = authConfig
+    self.flowStore = SignInFlowStore()
     self.getStudios = GetStudios(repository: studioRepository)
     self.getAppUpdateRequirement = GetAppUpdateRequirement(
       repository: RemoteAppReleaseRepository(client: client)
@@ -50,6 +52,7 @@ public final class AppContainer {
   public init(studioRepository: any StudioRepository) {
     self.sessionManager = nil
     self.authConfig = AuthConfig(supabaseURL: nil, anonKey: "")
+    self.flowStore = SignInFlowStore()
     self.getStudios = GetStudios(repository: studioRepository)
     self.getAppUpdateRequirement = nil
   }
@@ -58,15 +61,67 @@ public final class AppContainer {
     DashboardViewModel(getStudios: getStudios)
   }
 
-  /// Process-start work, awaited by the root view.
+  /// The auth gate.
   ///
-  /// Empty in a release build. The debug-only sign-in is the sole caller today
-  /// (148.5, until Google OAuth lands as 148.5c-b), and it is compiled out
-  /// rather than skipped at runtime.
-  public func start() async {
+  /// The preview container has no `SessionManager`, so it gets one built over
+  /// an in-memory store with nothing in it — the gate then reports `signedOut`
+  /// and a preview shows the login screen, which is the honest answer for a
+  /// container with no session.
+  public func makeAuthGateModel() -> AuthGateModel {
+    AuthGateModel(
+      sessionManager: sessionManager ?? Self.emptySessionManager(), flowStore: flowStore)
+  }
+
+  public func makeLoginViewModel() -> LoginViewModel {
+    let manager = sessionManager ?? Self.emptySessionManager()
+    return LoginViewModel(
+      beginGoogleSignIn: BeginGoogleSignIn(config: authConfig, flowStore: flowStore),
+      completeGoogleSignIn: CompleteGoogleSignIn(
+        flowStore: flowStore,
+        repository: SupabaseAuthRepository(config: authConfig),
+        sessionManager: manager
+      ),
+      flowStore: flowStore,
+      authenticator: WebAuthenticator(),
+      debugSignInAction: Self.debugSignInAction(sessionManager: manager, config: authConfig)
+    )
+  }
+
+  /// Nil outside a debug build — the whole affordance is compiled out rather
+  /// than skipped at runtime, so the release binary contains neither the
+  /// password grant nor the button's label.
+  ///
+  /// Also nil when the build carries no credentials: a button that is
+  /// guaranteed to fail is worse than no button, and it makes the state of the
+  /// checkout visible on the screen instead of on the second tap. `maestro/`
+  /// branches on exactly that.
+  private static func debugSignInAction(
+    sessionManager: SessionManager,
+    config: AuthConfig
+  ) -> (any DebugSignInAction)? {
     #if DEBUG
-    guard let sessionManager else { return }
-    await DebugAutoSignIn(sessionManager: sessionManager, config: authConfig).run()
+    return DebugPasswordSignIn.makeIfConfigured(sessionManager: sessionManager, config: config)
+    #else
+    return nil
     #endif
   }
+
+  private static func emptySessionManager() -> SessionManager {
+    SessionManager(
+      store: InMemorySessionStore(),
+      refresher: NoRefresher(),
+      authConfig: AuthConfig(supabaseURL: nil, anonKey: "")
+    )
+  }
+}
+
+/// A store with nothing in it, for the preview/test container.
+private struct InMemorySessionStore: SessionStore {
+  func read() async -> ProfileSession? { nil }
+  func write(_ session: ProfileSession) async {}
+  func clear() async {}
+}
+
+private struct NoRefresher: SessionRefresher {
+  func refresh(_ profile: ProfileSession) async -> RefreshOutcome { .unavailable }
 }
