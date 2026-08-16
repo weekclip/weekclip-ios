@@ -18,6 +18,8 @@ public struct RootView: View {
 
   public init(container: AppContainer) {
     self.container = container
+    // Before the first UINavigationBar exists. See WeekclipAppearance.
+    WeekclipAppearance.apply()
   }
 
   public var body: some View {
@@ -79,6 +81,11 @@ public struct RootView: View {
     // mints the session (148.5). `.task` rather than `.onAppear` so it is async
     // and cancelled with the view.
     .task { await container.start() }
+    // The environment default, so text that does not name a role still gets
+    // the brand face. Without it, only the views explicitly touched by this
+    // change were branded and everything else quietly stayed San Francisco —
+    // which is what the first simulator screenshot showed.
+    .font(.weekclip(.body))
   }
 }
 
@@ -92,9 +99,10 @@ struct PlaceholderScreen: View {
   var body: some View {
     VStack(spacing: 8) {
       Text(title)
-        .font(.title2)
+        .font(.weekclip(.title2))
         .accessibilityIdentifier("screen-title")
       Text("Not implemented yet")
+        .font(.weekclip(.body))
         .foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)

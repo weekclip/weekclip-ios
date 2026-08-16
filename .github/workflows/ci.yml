@@ -80,6 +80,14 @@ jobs:
       - name: Payment-string gate (PRD-0008 D3)
         run: ./scripts/check-no-payment-strings.sh
 
+      # Same reasoning: no toolchain, seconds not minutes. It also catches the
+      # one thing a green build cannot — an app icon with an alpha channel,
+      # which builds and installs fine and is rejected at upload. The claims
+      # that need a running app (PostScript names resolve, the icon compiled in,
+      # the logo is a template) are in BrandAssetsTests.
+      - name: Brand-asset gate
+        run: ./scripts/check-brand-assets.sh
+
       # Newest Xcode on the image, chosen by sort rather than pinned to a
       # version string that goes stale every runner-image bump.
       - name: Select the newest Xcode

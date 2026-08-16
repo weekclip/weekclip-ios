@@ -27,13 +27,19 @@ struct UpdateRequiredView: View {
 
   var body: some View {
     VStack(spacing: 16) {
+      // The only full-screen moment the app owns, and the one screen a blocked
+      // user is guaranteed to see — so it is where the mark earns its place.
+      // Above the title, not replacing it: `screen-title` is a maestro
+      // selector.
+      WeekclipLogoMark(size: .extraLarge)
+
       Text("Update Weekclip to continue")
-        .font(.title3)
+        .font(.weekclip(.title3))
         .multilineTextAlignment(.center)
         .accessibilityIdentifier("screen-title")
 
       Text("This version is no longer supported.")
-        .font(.body)
+        .font(.weekclip(.body))
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
 
