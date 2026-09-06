@@ -44,7 +44,7 @@ public struct AuthConfig: Sendable {
   /// service's `wrangler.jsonc`, because an address is not a credential.
   public static func development(anonKey: String) -> AuthConfig {
     AuthConfig(
-      supabaseURL: URL(string: "https://uwygkfgdpglwblkmndtc.supabase.co"),
+      supabaseURL: URL(string: "https://cgyrzvgrjxhreinxkjic.supabase.co"),
       anonKey: anonKey
     )
   }
