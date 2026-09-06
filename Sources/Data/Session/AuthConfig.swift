@@ -51,7 +51,7 @@ public struct AuthConfig: Sendable {
 
   public static func production(anonKey: String) -> AuthConfig {
     AuthConfig(
-      supabaseURL: URL(string: "https://pmkuddfuwdbvsjwudgii.supabase.co"),
+      supabaseURL: URL(string: "https://zzqtyoebdnjerkqdslva.supabase.co"),
       anonKey: anonKey
     )
   }
